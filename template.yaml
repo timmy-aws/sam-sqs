@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sqs-test
+
+  Sample SAM Template for basic sqs setup
+
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  MyQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: "test-sqs-queue"
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - "MyDeadLetterQueue"
+            - "Arn"
+        maxReceiveCount: 5
+  MyDeadLetterQueue:
+    Type: AWS::SQS::Queue
+  MySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt MyQueue.Arn
+          Protocol: "sqs"
+      DeliveryStatusLogging:
+        - Protocol: "sqs"
+          FailureFeedbackRoleArn: !GetAtt SnsFeedbackRole.Arn
+  SampleSQSPolicy: # SQS access policy
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref MyQueue
+      PolicyDocument:
+        Statement:
+          - Action: "sqs:SendMessage"
+            Sid: "Allow SNS to publish to SQS queue"
+            Effect: "Allow"
+            Resource: !GetAtt MyQueue.Arn
+            Principal:
+              Service: "sns.amazonaws.com"
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref MySNSTopic
+  SnsFeedbackRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sts:AssumeRole
+  CloudWatchLogsSnsPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref SnsFeedbackRole
+      PolicyName: SnsPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+            Resource: "*"
+  LambdaProcessorFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: lambda-processor/
+      Handler: lambda-processor.lambdaHandler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      Policies:
+        - AWSLambdaExecute
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - "SQS:ReceiveMessage"
+              Resource: !GetAtt MyQueue.Arn
+      Environment:
+        Variables:
+          SQS_QUEUE_URL: !Ref MyQueue
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MyQueue.Arn
+            BatchSize: 10
