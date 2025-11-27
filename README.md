@@ -1,7 +1,17 @@
-# Simple SAM SQS template
+# Simple SAM SQS templatepp
 
 aws SAM template to deploy a basic SQS queue with SNS event source and a receiver lambda function.
 The SQS queue also has a DLQ and the SNS is setup for logging of any errors via AWS cloudwatch logs. An IAM role and policy is included allowing SNS to publish to logs. An SQS policy is included allowing SNS to publish to SQS. Finally the lambda execution role has a policy attached allowing the function to receive the SQS message.
+
+## Running the template
+
+Navigate to your desired folder;
+In the terminal enter:
+
+```bash
+sam init --location https://github.com/timmy-aws/sam-sqs
+sam deploy --guided
+```
 
 <!-- # sqs-test
 
